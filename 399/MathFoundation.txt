@@ -1,0 +1,237 @@
+# Evaluate Division — Complete Mathematical & Algorithmic Exploration README
+
+## Index
+
+1. [Overview](#1-overview)
+2. [Formal Problem Definition](#2-formal-problem-definition)
+3. [Mathematical Foundations](#3-mathematical-foundations)
+   3.1. [Ratios as Equations](#31-ratios-as-equations)
+   3.2. [Weighted‑Edge Graph Model](#32-weighted‑edge-graph-model)
+   3.3. [Equivalence Classes & Connectivity](#33-equivalence-classes--connectivity)
+4. [Chosen Data Structure](#4-chosen-data-structure)
+   4.1. [Classic Disjoint‑Set Union](#41-classic-disjoint‑set-union)
+   4.2. [Extending DSU with Weights](#42-extending-dsu-with-weights)
+5. [Algorithm Walkthrough](#5-algorithm-walkthrough)
+   5.1. [`union` — Ingesting an Equation](#51-union--ingesting-an-equation)
+   5.2. [Path Compression & Weight Propagation](#52-path-compression--weight-propagation)
+   5.3. [`divide` — Answering a Query](#53-divide--answering-a-query)
+6. [Complexity Metrics](#6-complexity-metrics)
+   6.1. [Time Cost](#61-time-cost)
+   6.2. [Memory Footprint](#62-memory-footprint)
+7. [Correctness Proof](#7-correctness-proof)
+8. [Special Scenarios](#8-special-scenarios)
+9. [Floating‑Point Stability](#9-floating‑point-stability)
+10. [Illustrative Example](#10-illustrative-example)
+11. [Python Implementation Notes](#11-python-implementation-notes)
+    11.1. [Class Layout](#111-class-layout)
+    11.2. [Line‑by‑Line Exegesis](#112-line‑by‑line-exegesis)
+12. [Testing Methodology](#12-testing-methodology)
+13. [Possible Extensions](#13-possible-extensions)
+14. [Bibliography](#14-bibliography)
+
+---
+
+## 1. Overview
+
+The **Evaluate Division** challenge takes a collection of ratio statements between symbolic variables and builds a mechanism able to answer any subsequent division query. Each statement of the form $A_i / B_i = v_i$ introduces a *multiplicative link* between the two unknown positive real numbers.
+With up to twenty equations and twenty questions, our goal is to create a representation that **merges compatible variables efficiently** and **retrieves ratio values instantly**.
+
+---
+
+## 2. Formal Problem Definition
+
+We are given:
+
+* **`equations`** — list of pairs $[A_i, B_i]$.
+* **`values`** — real numbers such that $\text{values}[i] = v_i = \frac{A_i}{B_i}$.
+* **`queries`** — list of pairs $[C_j, D_j]$ where each asks for the numeric result of $C_j / D_j$.
+
+Return a floating‑point array containing the answer to every query. When the requested ratio is impossible to determine (variables disconnected or absent), output **‑1.0**.
+
+---
+
+## 3. Mathematical Foundations
+
+### 3.1 Ratios as Equations
+
+A single ratio equation $A/B = k$ is equivalent to $A = kB$. Ratios **multiply along a chain**: if $A/B = k_1$ and $B/C = k_2$ then $A/C = k_1k_2$. Likewise, the reciprocal holds: $B/A = 1/k_1$.
+
+### 3.2 Weighted‑Edge Graph Model
+
+Model the system as a **directed weighted graph** $G = (V,E)$:
+
+* **Vertices**: variables.
+* **Edges**: for each equation, add $A \to B$ with weight $k$ and $B \to A$ with weight $1/k$.
+* The value of query $C/D$ equals the product of edge weights along any path connecting $C$ to $D$. If no path exists, variables are unrelated.
+
+While depth‑first search can answer a single query, repeatedly traversing the graph for many queries would add overhead. A more elegant alternative views connectivity as an **equivalence relation**.
+
+### 3.3 Equivalence Classes & Connectivity
+
+Connectivity defined by ratios is:
+
+* *Reflexive*: $A/A = 1$.
+* *Symmetric*: $A/B = k \Rightarrow B/A = 1/k$.
+* *Transitive*: $A/B = k_1,\; B/C = k_2 \Rightarrow A/C = k_1k_2$.
+  Thus, variables partition into **disjoint sets** where every pair inside a set has a determinate ratio; between sets, ratios are undefined. Managing such partitions is exactly the remit of a **Disjoint‑Set Union** (DSU, or Union‑Find).
+
+---
+
+## 4. Chosen Data Structure
+
+### 4.1 Classic Disjoint‑Set Union
+
+DSU supports two core operations:
+
+* **`find(x)`** — return a canonical *root* element of the set holding $x$.
+* **`union(x,y)`** — merge the sets that contain $x$ and $y$.
+  With *union‑by‑rank*/**‑size** and *path compression*, both operations run in near‑constant amortized time (inverse Ackermann function $\alpha(n)$).
+
+### 4.2 Extending DSU with Weights
+
+To keep track of ratios, we attach a **weight** to every node:
+
+* `weight[x]` stores $w_x$ such that $\tfrac{x}{\text{parent}[x]} = w_x$.
+* Any root records `weight[root] = 1` by definition.
+
+When we compress paths or merge sets we update these weights so that, for every node, multiplying `weight` values along edges always reproduces the original ratio implied by the equation chain.
+
+---
+
+## 5. Algorithm Walkthrough
+
+### 5.1 `union` — Ingesting an Equation
+
+For each equation $(A,B), k$:
+
+1. Guarantee both variables are present (`_add`).
+2. Let $r_A$ and $r_B$ be their roots.
+3. If already in the same set, no action is required.
+4. Otherwise, make $r_A$ a child of $r_B$ and assign a weight ensuring
+   $\frac{A}{r_A} \times \frac{r_A}{r_B} \times \frac{r_B}{B} = k$.
+   Solving gives
+   $\text{weight}[r_A] = k \times \frac{\text{weight}[B]}{\text{weight}[A]}.$
+
+### 5.2 Path Compression & Weight Propagation
+
+`find(x)` climbs up to the root. During the recursion unwind, each visited node is directly attached to the root and its `weight` is multiplied by its parent’s previous `weight`, thereby preserving $x/root$.
+
+### 5.3 `divide` — Answering a Query
+
+To compute $C/D$:
+
+1. If either variable is missing, return **‑1.0**.
+2. Execute `find(C)` and `find(D)`; if roots differ, they belong to separate components ⇒ undefined.
+3. Otherwise, result is simply
+   $\frac{C}{D} = \frac{\text{weight}[C]}{\text{weight}[D]}.$
+   The previous steps have ensured both weights are measured against the common root.
+
+---
+
+## 6. Complexity Metrics
+
+### 6.1 Time Cost
+
+* Each `union` or `divide` calls at most two `find`s.
+* With path compression + union‑by‑size, each `find` costs $\mathcal O(\alpha(N))$ where $N$ is the variable count (≤40).
+  **Preprocessing**: $\mathcal O(M \alpha(N))$ for $M$ equations.
+  **Queries**: $\mathcal O(Q \alpha(N))$.
+
+### 6.2 Memory Footprint
+
+Two dictionaries (`parent`, `weight`) of size $|V|$ → $\mathcal O(|V|)$ space.
+
+---
+
+## 7. Correctness Proof
+
+Inductively preserve the invariant *"`weight[x]` equals $x / root$"*.
+
+*Base*: upon creation, `parent[x]=x`, `weight[x]=1`, so $x/x = 1$.
+
+*Induction — `union`*: merging $r_A$ beneath $r_B$ with the formula above ensures every node in $r_A$'s subtree now satisfies the invariant relative to $r_B$. Nodes elsewhere remain unaffected.
+
+*Induction — `find`*: during compression, we set
+`weight[x] *= weight[parent[x]]` before re‑parenting, translating $x$‘s ratio from the old parent to the root. The invariant therefore continues to hold.
+
+Consequently, when both variables share a root, `weight[C]/weight[D]` yields the exact ratio. When roots differ, no path exists, making **‑1.0** the correct sentinel.
+
+---
+
+## 8. Special Scenarios
+
+* **Absent variable** → output **‑1.0**.
+* **Self‑division** (`C == D`) → result **1.0** by reflexivity.
+* **Redundant equation** → skip if roots already identical.
+
+---
+
+## 9. Floating‑Point Stability
+
+Input constraints guarantee the worst product is $20^{20} \approx 1.05×10^{26}$, safely within double precision. No subtraction occurs, so catastrophic cancellation is not a concern.
+
+---
+
+## 10. Illustrative Example
+
+Using the first sample ($a/b=2$, $b/c=3$):
+
+1. After unions: `parent = {a:b, b:c, c:c}`, `weight = {a:2, b:3, c:1}`.
+2. Query `a/c`:
+
+   * Compress `a` straight to `c`, updating `weight[a]` from 2 → 6.
+   * Return `6 / 1 = 6`.
+3. Query `b/a`: after compression, `weight[b] = 3`, `weight[a] = 6`, so result `3/6 = 0.5`.
+
+---
+
+## 11. Python Implementation Notes
+
+### 11.1 Class Layout
+
+```python
+class Solution:
+    class UF:
+        ...
+    def calcEquation(self, equations, values, queries):
+        ...
+```
+
+`UF` packages the weighted DSU; `Solution` meets LeetCode’s function signature.
+
+### 11.2 Line‑by‑Line Exegesis
+
+* **`__init__`** — allocate dictionaries.
+* **`_add`** — lazy insertion with identity mapping and weight 1.
+* **`find`** — recursive root search + on‑the‑fly compression.
+* **`union`** — fold two components using the equation’s constant.
+* **`divide`** — return ratio or **‑1.0**.
+* **`calcEquation`** — orchestrator: process all equations then answer every query.
+
+---
+
+## 12. Testing Methodology
+
+* **Unit tests**: single edge, two‑edge chain, disconnected sets.
+* **Random fuzzing**: generate graphs, answer with BFS for ground truth, compare.
+* **Reciprocal sanity**: verify `ratio * inverse ≈ 1`.
+* **Edge coverage**: unknown symbols, self queries, duplicate equations.
+
+---
+
+## 13. Possible Extensions
+
+* **Dynamic removal** of equations (requires fully dynamic connectivity).
+* **Exact arithmetic** using `fractions.Fraction` for symbolically perfect results.
+* **Scalability** — algorithm remains quasi‑constant time even for millions of variables.
+
+---
+
+## 14. Bibliography
+
+1. Tarjan, R. E. *Efficiency of a Good But Not Linear Set Union Algorithm.* JACM, 1975.
+2. Cormen, T. H., et al. *Introduction to Algorithms*, 3rd ed., Chapter 21.
+3. Sedgewick, R., & Wayne, K. *Algorithms*, 4th ed., Section 1.5.
+4. *CP‑Algorithms*: Disjoint Set Union article.
+5. IEEE Standard 754‑2008 for Floating‑Point Arithmetic.
+6. LeetCode #399 discussion board (retrieved 2025‑07‑07).
