@@ -31,7 +31,21 @@ int **visited;
 * `rows` and `cols` store the matrix dimensions for quick boundary checks.
 * `visited` is a 2D memo table: `visited[i][j]` holds the length of the longest increasing path *starting* at cell `(i,j)`. 0 means “not yet computed.”
 
-### Depth‑First Search Function
+## Range and Performance of `visited[i][j]` and `best`
+
+* **`visited[i][j]` values**: Initially, each entry is `0` to indicate “unvisited.” Once computed, it is set to the length of the longest increasing path starting at `(i,j)`. Therefore, its values range from:
+
+  * **0**: cell not yet processed
+  * **1 to (m × n)**: maximum possible path length in the worst case where every cell forms a strictly increasing sequence
+* **`best` variable**: Within each `dfs` call, `best` is initialized to `1` (the minimum path length, counting the cell itself). It is then compared against all valid neighbor paths (each `1 + dfs(neighbor)`), so ultimately `best` also ranges from **1** up to **m × n** in the most extended path scenario.
+
+**Performance considerations**:
+
+* Accessing or updating a single `visited[i][j]` entry is **O(1)** in time, and the entire `visited` table uses **O(mn)** space.
+* The `best` variable lives on the stack for each `dfs` invocation, uses **O(1)** space per call, and each comparison or assignment involving `best` is **O(1)**.
+* Memoization via `visited` ensures each cell’s DFS executes exactly once, giving an overall time complexity of **O(mn)**.
+
+## Depth‑First Search Function
 
 ```c
 int dfs(int** matrix, int i, int j) {
@@ -57,12 +71,7 @@ int dfs(int** matrix, int i, int j) {
 }
 ```
 
-* **Memo check**: Returns immediately if we've already computed `visited[i][j]`.
-* **Base path length**: `best = 1` covers the case with no valid moves—at minimum the path includes the cell itself.
-* **Recursion**: For each neighbor that is strictly larger, call `dfs` to get that neighbor’s longest path length, then add 1.
-* **Memoization store**: Saves `best` so subsequent calls skip re‑exploration.
-
-### Main Entry Point
+## Main Entry Point
 
 ```c
 int longestIncreasingPath(int** matrix,
@@ -92,10 +101,6 @@ int longestIncreasingPath(int** matrix,
     return answer;
 }
 ```
-
-1. **Initialization**: Set `rows`/`cols`, allocate and zero‑initialize `visited`.
-2. **Computation**: Launch `dfs` from every cell, keeping track of the global maximum path length (`answer`).
-3. **Cleanup**: Free all allocated memory to avoid leaks.
 
 ## Recursion & Memoization Insights
 
