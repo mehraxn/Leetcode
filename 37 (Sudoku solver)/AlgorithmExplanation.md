@@ -1,4 +1,4 @@
-# README — Algorithmic Design of the Sudoku Solver (A→Z)
+# README — Algorithmic Design of the Sudoku Solver 
 
 ## 0) Purpose
 
